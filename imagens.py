@@ -4,11 +4,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
 
 from patchify import patchify
 from sklearn.model_selection import train_test_split
 
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import (
     Input,
     Conv2D,
@@ -20,6 +22,7 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.metrics import MeanIoU
+from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow.keras.backend as K
 
 
@@ -31,6 +34,9 @@ BASE_DIR = Path("treino")
 
 IMAGES_DIR = BASE_DIR / "imagens"
 MASKS_DIR = BASE_DIR / "mascaras"
+
+MODELS_DIR = Path("modelos")
+MODELS_DIR.mkdir(exist_ok=True)
 
 PATCH_SIZE = 256
 
@@ -53,6 +59,15 @@ CLASS_COLORS = {
 
 CLASS_NAMES = list(CLASS_COLORS.keys())
 NUMBER_OF_CLASSES = len(CLASS_NAMES)
+
+# Colormap fixo construído a partir de CLASS_COLORS.
+# A ordem é a mesma de CLASS_NAMES, por isso o id de cada classe
+# (0, 1, 2, ...) corresponde sempre à mesma cor, tanto nas máscaras
+# originais como nas previsões do modelo. Nada de cores "aleatórias"
+# escolhidas automaticamente pelo matplotlib (ex: "tab10").
+SEGMENTATION_CMAP = ListedColormap(
+    [tuple(channel / 255.0 for channel in CLASS_COLORS[name]) for name in CLASS_NAMES]
+)
 
 
 # ============================================================
@@ -307,7 +322,27 @@ def prepare_dataset_from_pairs(pairs, dataset_name):
     return images_array, masks_array
 
 
-def show_random_examples(images, masks, number_of_examples=4):
+def add_class_legend():
+    """Adiciona uma legenda com o nome e a cor de cada classe ao gráfico atual."""
+    legend_handles = [
+        Patch(
+            facecolor=tuple(channel / 255.0 for channel in CLASS_COLORS[name]),
+            edgecolor="black",
+            label=name,
+        )
+        for name in CLASS_NAMES
+    ]
+
+    plt.legend(
+        handles=legend_handles,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+        borderaxespad=0,
+        fontsize="small",
+    )
+
+
+def show_random_examples(images, masks, number_of_examples=15):
     number_of_examples = min(number_of_examples, len(images))
 
     selected_indexes = random.sample(
@@ -316,7 +351,7 @@ def show_random_examples(images, masks, number_of_examples=4):
     )
 
     for index in selected_indexes:
-        plt.figure(figsize=(10, 5))
+        plt.figure(figsize=(11, 5))
 
         plt.subplot(1, 2, 1)
         plt.title(f"Imagem - patch {index}")
@@ -327,11 +362,12 @@ def show_random_examples(images, masks, number_of_examples=4):
         plt.title(f"Máscara - patch {index}")
         plt.imshow(
             masks[index],
-            cmap="tab10",
+            cmap=SEGMENTATION_CMAP,
             vmin=0,
             vmax=NUMBER_OF_CLASSES - 1,
         )
         plt.axis("off")
+        add_class_legend()
 
         plt.tight_layout()
         plt.show()
@@ -455,7 +491,7 @@ def train_unet_model(
     train_masks,
     validation_images,
     validation_masks,
-    epochs=25,
+    epochs=60,
     batch_size=4,
 ):
     train_masks_cat = to_categorical(
@@ -487,6 +523,14 @@ def train_unet_model(
 
     model.summary()
 
+    checkpoint = ModelCheckpoint(
+        filepath=MODELS_DIR / "melhor_modelo_unet.keras",
+        monitor="val_jacard_coef",
+        save_best_only=True,
+        mode="max",
+        verbose=1,
+    )
+
     history = model.fit(
         train_images,
         train_masks_cat,
@@ -495,6 +539,7 @@ def train_unet_model(
         epochs=epochs,
         shuffle=True,
         verbose=1,
+        callbacks=[checkpoint],
     )
 
     return model, history
@@ -536,6 +581,75 @@ def plot_training_history(history):
     plt.show()
 
 
+def save_training_results(history):
+    final_train_accuracy = history.history["accuracy"][-1]
+    final_val_accuracy = history.history["val_accuracy"][-1]
+    final_train_iou = history.history["jacard_coef"][-1]
+    final_val_iou = history.history["val_jacard_coef"][-1]
+
+    best_val_accuracy = max(history.history["val_accuracy"])
+    best_val_iou = max(history.history["val_jacard_coef"])
+
+    best_val_accuracy_epoch = (
+        history.history["val_accuracy"].index(best_val_accuracy) + 1
+    )
+
+    best_val_iou_epoch = (
+        history.history["val_jacard_coef"].index(best_val_iou) + 1
+    )
+
+    print("\n===== RESULTADOS FINAIS =====")
+    print(f"Accuracy treino final: {final_train_accuracy * 100:.2f}%")
+    print(f"Accuracy validação final: {final_val_accuracy * 100:.2f}%")
+    print(f"IoU/Jaccard treino final: {final_train_iou * 100:.2f}%")
+    print(f"IoU/Jaccard validação final: {final_val_iou * 100:.2f}%")
+
+    print("\n===== MELHORES RESULTADOS =====")
+    print(
+        f"Melhor accuracy validação: "
+        f"{best_val_accuracy * 100:.2f}% "
+        f"na época {best_val_accuracy_epoch}"
+    )
+    print(
+        f"Melhor IoU/Jaccard validação: "
+        f"{best_val_iou * 100:.2f}% "
+        f"na época {best_val_iou_epoch}"
+    )
+
+    with open("resultados_treino.txt", "w", encoding="utf-8") as file:
+        file.write("===== RESULTADOS FINAIS =====\n")
+        file.write(
+            f"Accuracy treino final: "
+            f"{final_train_accuracy * 100:.2f}%\n"
+        )
+        file.write(
+            f"Accuracy validação final: "
+            f"{final_val_accuracy * 100:.2f}%\n"
+        )
+        file.write(
+            f"IoU/Jaccard treino final: "
+            f"{final_train_iou * 100:.2f}%\n"
+        )
+        file.write(
+            f"IoU/Jaccard validação final: "
+            f"{final_val_iou * 100:.2f}%\n\n"
+        )
+
+        file.write("===== MELHORES RESULTADOS =====\n")
+        file.write(
+            f"Melhor accuracy validação: "
+            f"{best_val_accuracy * 100:.2f}% "
+            f"na época {best_val_accuracy_epoch}\n"
+        )
+        file.write(
+            f"Melhor IoU/Jaccard validação: "
+            f"{best_val_iou * 100:.2f}% "
+            f"na época {best_val_iou_epoch}\n"
+        )
+
+    print("\nResultados guardados em: resultados_treino.txt")
+
+
 def evaluate_model_with_mean_iou(
     model,
     test_images,
@@ -543,6 +657,9 @@ def evaluate_model_with_mean_iou(
 ):
     predictions = model.predict(test_images)
     predicted_masks = np.argmax(predictions, axis=-1)
+
+    print("\nClasses reais no teste:", np.unique(test_masks))
+    print("Classes previstas pelo modelo:", np.unique(predicted_masks))
 
     mean_iou = MeanIoU(num_classes=NUMBER_OF_CLASSES)
     mean_iou.update_state(test_masks, predicted_masks)
@@ -569,32 +686,33 @@ def show_prediction_examples(
     )
 
     for index in selected_indexes:
-        plt.figure(figsize=(15, 5))
+        plt.figure(figsize=(16, 5))
 
         plt.subplot(1, 3, 1)
-        plt.title(f"Imagem de teste {index}")
+        plt.title(f"Imagem original - teste {index}")
         plt.imshow(test_images[index])
         plt.axis("off")
 
         plt.subplot(1, 3, 2)
-        plt.title("Máscara real")
+        plt.title("Máscara correta/anotada")
         plt.imshow(
             test_masks[index],
-            cmap="tab10",
+            cmap=SEGMENTATION_CMAP,
             vmin=0,
             vmax=NUMBER_OF_CLASSES - 1,
         )
         plt.axis("off")
 
         plt.subplot(1, 3, 3)
-        plt.title("Máscara prevista")
+        plt.title("Previsão do modelo")
         plt.imshow(
             predicted_masks[index],
-            cmap="tab10",
+            cmap=SEGMENTATION_CMAP,
             vmin=0,
             vmax=NUMBER_OF_CLASSES - 1,
         )
         plt.axis("off")
+        add_class_legend()
 
         plt.tight_layout()
         plt.show()
@@ -651,7 +769,7 @@ if __name__ == "__main__":
     show_random_examples(
         train_images,
         train_masks,
-        number_of_examples=4,
+        number_of_examples=15,
     )
 
     # ========================================================
@@ -663,14 +781,30 @@ if __name__ == "__main__":
         train_masks=train_masks,
         validation_images=validation_images,
         validation_masks=validation_masks,
-        epochs=25,
+        epochs=60,
         batch_size=4,
     )
 
     plot_training_history(history)
 
+    save_training_results(history)
+
+    model.save(MODELS_DIR / "ultimo_modelo_unet.keras")
+
+    print("\nÚltimo modelo guardado como: modelos/ultimo_modelo_unet.keras")
+    print("Melhor modelo guardado como: modelos/melhor_modelo_unet.keras")
+
+    # ========================================================
+    # AVALIAÇÃO COM O MELHOR MODELO
+    # ========================================================
+
+    best_model = load_model(
+        MODELS_DIR / "melhor_modelo_unet.keras",
+        custom_objects={"jacard_coef": jacard_coef},
+    )
+
     predicted_test_masks = evaluate_model_with_mean_iou(
-        model=model,
+        model=best_model,
         test_images=test_images,
         test_masks=test_masks,
     )
@@ -681,7 +815,3 @@ if __name__ == "__main__":
         predicted_masks=predicted_test_masks,
         number_of_examples=4,
     )
-
-    model.save("unet_segmentacao_aerea_teste.keras")
-
-    print("\nModelo guardado como: unet_segmentacao_aerea_teste.keras")
