@@ -343,7 +343,7 @@ def add_class_legend():
     )
 
 
-def show_random_examples(images, masks, number_of_examples=15):
+def show_random_examples(images, masks, number_of_examples=5):
     number_of_examples = min(number_of_examples, len(images))
 
     selected_indexes = random.sample(
@@ -531,7 +531,7 @@ def train_unet_model(
     train_masks,
     validation_images,
     validation_masks,
-    epochs=60,
+    epochs=75,
     batch_size=4,
 ):
     train_masks_cat = to_categorical(
@@ -842,7 +842,7 @@ if __name__ == "__main__":
     show_random_examples(
         train_images,
         train_masks,
-        number_of_examples=15,
+        number_of_examples=5,
     )
 
     # ========================================================
@@ -854,7 +854,7 @@ if __name__ == "__main__":
         train_masks=train_masks,
         validation_images=validation_images,
         validation_masks=validation_masks,
-        epochs=60,
+        epochs=75,
         batch_size=4,
     )
 
@@ -890,5 +890,5 @@ if __name__ == "__main__":
         test_images=test_images,
         test_masks=test_masks,
         predicted_masks=predicted_test_masks,
-        number_of_examples=4,
+        number_of_examples=20,
     )

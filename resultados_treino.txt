@@ -1,9 +1,9 @@
 ===== RESULTADOS FINAIS SEM BACKGROUND =====
-Accuracy treino final: 76.09%
-Accuracy validação final: 70.51%
-IoU/Jaccard treino final: 52.23%
-IoU/Jaccard validação final: 30.89%
+Accuracy treino final: 75.92%
+Accuracy validação final: 68.37%
+IoU/Jaccard treino final: 51.12%
+IoU/Jaccard validação final: 35.58%
 
 ===== MELHORES RESULTADOS SEM BACKGROUND =====
-Melhor accuracy validação: 74.64% na época 54
-Melhor IoU/Jaccard validação: 34.06% na época 58
+Melhor accuracy validação: 73.83% na época 58
+Melhor IoU/Jaccard validação: 40.42% na época 58
