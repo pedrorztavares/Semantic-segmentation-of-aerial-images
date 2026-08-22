@@ -9,8 +9,8 @@ from matplotlib.patches import Patch
 
 from patchify import patchify
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
 
+import tensorflow as tf
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import (
     Input,
@@ -61,13 +61,14 @@ CLASS_COLORS = {
 CLASS_NAMES = list(CLASS_COLORS.keys())
 NUMBER_OF_CLASSES = len(CLASS_NAMES)
 
-# Colormap fixo construído a partir de CLASS_COLORS.
-# A ordem é a mesma de CLASS_NAMES, por isso o id de cada classe
-# (0, 1, 2, ...) corresponde sempre à mesma cor, tanto nas máscaras
-# originais como nas previsões do modelo. Nada de cores "aleatórias"
-# escolhidas automaticamente pelo matplotlib (ex: "tab10").
+# Classe a ignorar nas métricas e na loss
+IGNORE_CLASS_ID = 0
+
 SEGMENTATION_CMAP = ListedColormap(
-    [tuple(channel / 255.0 for channel in CLASS_COLORS[name]) for name in CLASS_NAMES]
+    [
+        tuple(channel / 255.0 for channel in CLASS_COLORS[name])
+        for name in CLASS_NAMES
+    ]
 )
 
 
@@ -324,7 +325,6 @@ def prepare_dataset_from_pairs(pairs, dataset_name):
 
 
 def add_class_legend():
-    """Adiciona uma legenda com o nome e a cor de cada classe ao gráfico atual."""
     legend_handles = [
         Patch(
             facecolor=tuple(channel / 255.0 for channel in CLASS_COLORS[name]),
@@ -375,42 +375,60 @@ def show_random_examples(images, masks, number_of_examples=15):
 
 
 # ============================================================
-# DISTRIBUIÇÃO DE CLASSES (PARA SABER ONDE FALTAM DADOS)
+# LOSS E MÉTRICAS SEM BACKGROUND
 # ============================================================
 
-def print_class_pixel_distribution(masks, dataset_name):
-    """Mostra que percentagem de píxeis de cada classe existe num conjunto.
+def masked_categorical_crossentropy(y_true, y_pred):
+    y_true_ids = tf.argmax(y_true, axis=-1)
 
-    Classes com percentagens muito baixas são as que mais beneficiam
-    de teres mais imagens onde essa classe apareça.
-    """
-    total_pixels = masks.size
+    valid_mask = tf.not_equal(y_true_ids, IGNORE_CLASS_ID)
+    valid_mask = tf.cast(valid_mask, tf.float32)
 
-    print(f"\n===== DISTRIBUIÇÃO DE CLASSES — {dataset_name.upper()} =====")
-    print(f"{'Classe':<20}{'Píxeis':>14}{'% do total':>14}")
+    loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred)
 
-    class_ids, counts = np.unique(masks, return_counts=True)
-    counts_by_class = dict(zip(class_ids, counts))
+    loss = loss * valid_mask
 
-    for class_id, class_name in enumerate(CLASS_NAMES):
-        count = int(counts_by_class.get(class_id, 0))
-        percentage = 100.0 * count / total_pixels
-        print(f"{class_name:<20}{count:>14,}{percentage:>13.2f}%")
+    return tf.reduce_sum(loss) / (tf.reduce_sum(valid_mask) + K.epsilon())
 
 
-# ============================================================
-# MÉTRICA JACCARD / IOU
-# ============================================================
+def masked_accuracy(y_true, y_pred):
+    y_true_ids = tf.argmax(y_true, axis=-1)
+    y_pred_ids = tf.argmax(y_pred, axis=-1)
 
-def jacard_coef(y_true, y_pred):
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
+    valid_mask = tf.not_equal(y_true_ids, IGNORE_CLASS_ID)
 
-    intersection = K.sum(y_true_f * y_pred_f)
+    correct_predictions = tf.equal(y_true_ids, y_pred_ids)
+    correct_predictions = tf.logical_and(correct_predictions, valid_mask)
 
-    return (intersection + 1.0) / (
-        K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0
+    correct_predictions = tf.cast(correct_predictions, tf.float32)
+    valid_mask = tf.cast(valid_mask, tf.float32)
+
+    return tf.reduce_sum(correct_predictions) / (
+        tf.reduce_sum(valid_mask) + K.epsilon()
     )
+
+
+def masked_jaccard_coef(y_true, y_pred):
+    y_true_ids = tf.argmax(y_true, axis=-1)
+    y_pred_ids = tf.argmax(y_pred, axis=-1)
+
+    iou_values = []
+
+    for class_id in range(1, NUMBER_OF_CLASSES):
+        true_class = tf.equal(y_true_ids, class_id)
+        pred_class = tf.equal(y_pred_ids, class_id)
+
+        intersection = tf.logical_and(true_class, pred_class)
+        union = tf.logical_or(true_class, pred_class)
+
+        intersection = tf.reduce_sum(tf.cast(intersection, tf.float32))
+        union = tf.reduce_sum(tf.cast(union, tf.float32))
+
+        iou = intersection / (union + K.epsilon())
+
+        iou_values.append(iou)
+
+    return tf.reduce_mean(tf.stack(iou_values))
 
 
 # ============================================================
@@ -425,7 +443,6 @@ def build_unet_model(
 ) -> Model:
     inputs = Input((image_height, image_width, image_channels))
 
-    # Encoder
     c1 = Conv2D(16, (3, 3), activation="relu", padding="same")(inputs)
     c1 = Dropout(0.1)(c1)
     c1 = Conv2D(16, (3, 3), activation="relu", padding="same")(c1)
@@ -446,12 +463,10 @@ def build_unet_model(
     c4 = Conv2D(128, (3, 3), activation="relu", padding="same")(c4)
     p4 = MaxPooling2D((2, 2))(c4)
 
-    # Bottleneck
     c5 = Conv2D(256, (3, 3), activation="relu", padding="same")(p4)
     c5 = Dropout(0.3)(c5)
     c5 = Conv2D(256, (3, 3), activation="relu", padding="same")(c5)
 
-    # Decoder
     u6 = Conv2DTranspose(
         128,
         (2, 2),
@@ -542,15 +557,15 @@ def train_unet_model(
 
     model.compile(
         optimizer=Adam(learning_rate=0.001),
-        loss="categorical_crossentropy",
-        metrics=["accuracy", jacard_coef],
+        loss=masked_categorical_crossentropy,
+        metrics=[masked_accuracy, masked_jaccard_coef],
     )
 
     model.summary()
 
     checkpoint = ModelCheckpoint(
         filepath=MODELS_DIR / "melhor_modelo_unet.keras",
-        monitor="val_jacard_coef",
+        monitor="val_masked_jaccard_coef",
         save_best_only=True,
         mode="max",
         verbose=1,
@@ -585,21 +600,27 @@ def plot_training_history(history):
     plt.show()
 
     plt.figure(figsize=(8, 5))
-    plt.plot(history.history["accuracy"], label="Accuracy treino")
-    plt.plot(history.history["val_accuracy"], label="Accuracy validação")
-    plt.title("Training and validation accuracy")
+    plt.plot(history.history["masked_accuracy"], label="Accuracy treino sem background")
+    plt.plot(
+        history.history["val_masked_accuracy"],
+        label="Accuracy validação sem background",
+    )
+    plt.title("Training and validation accuracy sem background")
     plt.xlabel("Épocas")
     plt.ylabel("Accuracy")
     plt.legend()
     plt.show()
 
     plt.figure(figsize=(8, 5))
-    plt.plot(history.history["jacard_coef"], label="IoU/Jaccard treino")
     plt.plot(
-        history.history["val_jacard_coef"],
-        label="IoU/Jaccard validação",
+        history.history["masked_jaccard_coef"],
+        label="IoU/Jaccard treino sem background",
     )
-    plt.title("Training and validation IoU/Jaccard")
+    plt.plot(
+        history.history["val_masked_jaccard_coef"],
+        label="IoU/Jaccard validação sem background",
+    )
+    plt.title("Training and validation IoU/Jaccard sem background")
     plt.xlabel("Épocas")
     plt.ylabel("IoU/Jaccard")
     plt.legend()
@@ -607,29 +628,29 @@ def plot_training_history(history):
 
 
 def save_training_results(history):
-    final_train_accuracy = history.history["accuracy"][-1]
-    final_val_accuracy = history.history["val_accuracy"][-1]
-    final_train_iou = history.history["jacard_coef"][-1]
-    final_val_iou = history.history["val_jacard_coef"][-1]
+    final_train_accuracy = history.history["masked_accuracy"][-1]
+    final_val_accuracy = history.history["val_masked_accuracy"][-1]
+    final_train_iou = history.history["masked_jaccard_coef"][-1]
+    final_val_iou = history.history["val_masked_jaccard_coef"][-1]
 
-    best_val_accuracy = max(history.history["val_accuracy"])
-    best_val_iou = max(history.history["val_jacard_coef"])
+    best_val_accuracy = max(history.history["val_masked_accuracy"])
+    best_val_iou = max(history.history["val_masked_jaccard_coef"])
 
     best_val_accuracy_epoch = (
-        history.history["val_accuracy"].index(best_val_accuracy) + 1
+        history.history["val_masked_accuracy"].index(best_val_accuracy) + 1
     )
 
     best_val_iou_epoch = (
-        history.history["val_jacard_coef"].index(best_val_iou) + 1
+        history.history["val_masked_jaccard_coef"].index(best_val_iou) + 1
     )
 
-    print("\n===== RESULTADOS FINAIS =====")
+    print("\n===== RESULTADOS FINAIS SEM BACKGROUND =====")
     print(f"Accuracy treino final: {final_train_accuracy * 100:.2f}%")
     print(f"Accuracy validação final: {final_val_accuracy * 100:.2f}%")
     print(f"IoU/Jaccard treino final: {final_train_iou * 100:.2f}%")
     print(f"IoU/Jaccard validação final: {final_val_iou * 100:.2f}%")
 
-    print("\n===== MELHORES RESULTADOS =====")
+    print("\n===== MELHORES RESULTADOS SEM BACKGROUND =====")
     print(
         f"Melhor accuracy validação: "
         f"{best_val_accuracy * 100:.2f}% "
@@ -642,7 +663,7 @@ def save_training_results(history):
     )
 
     with open("resultados_treino.txt", "w", encoding="utf-8") as file:
-        file.write("===== RESULTADOS FINAIS =====\n")
+        file.write("===== RESULTADOS FINAIS SEM BACKGROUND =====\n")
         file.write(
             f"Accuracy treino final: "
             f"{final_train_accuracy * 100:.2f}%\n"
@@ -660,7 +681,7 @@ def save_training_results(history):
             f"{final_val_iou * 100:.2f}%\n\n"
         )
 
-        file.write("===== MELHORES RESULTADOS =====\n")
+        file.write("===== MELHORES RESULTADOS SEM BACKGROUND =====\n")
         file.write(
             f"Melhor accuracy validação: "
             f"{best_val_accuracy * 100:.2f}% "
@@ -686,126 +707,42 @@ def evaluate_model_with_mean_iou(
     print("\nClasses reais no teste:", np.unique(test_masks))
     print("Classes previstas pelo modelo:", np.unique(predicted_masks))
 
-    mean_iou = MeanIoU(num_classes=NUMBER_OF_CLASSES)
-    mean_iou.update_state(test_masks, predicted_masks)
+    # Mean IoU normal, incluindo background
+    mean_iou_all = MeanIoU(num_classes=NUMBER_OF_CLASSES)
+    mean_iou_all.update_state(test_masks, predicted_masks)
 
     print(
-        "\nMean IoU no conjunto de teste:",
-        mean_iou.result().numpy(),
+        "\nMean IoU no conjunto de teste incluindo background:",
+        mean_iou_all.result().numpy(),
     )
+
+    # Mean IoU manual sem background
+    iou_values = []
+
+    for class_id in range(1, NUMBER_OF_CLASSES):
+        true_class = test_masks == class_id
+        pred_class = predicted_masks == class_id
+
+        intersection = np.logical_and(true_class, pred_class).sum()
+        union = np.logical_or(true_class, pred_class).sum()
+
+        if union > 0:
+            iou = intersection / union
+            iou_values.append(iou)
+
+            print(
+                f"IoU classe {class_id} ({CLASS_NAMES[class_id]}): "
+                f"{iou * 100:.2f}%"
+            )
+
+    if iou_values:
+        mean_iou_no_background = np.mean(iou_values)
+        print(
+            "\nMean IoU no conjunto de teste sem background:",
+            mean_iou_no_background,
+        )
 
     return predicted_masks
-
-
-# ============================================================
-# MÉTRICAS POR CLASSE
-# ============================================================
-
-def compute_per_class_metrics(true_masks, predicted_masks):
-    """Calcula accuracy (recall) e IoU por classe, a partir da matriz de confusão.
-
-    - accuracy por classe = píxeis dessa classe classificados corretamente
-      / total de píxeis reais dessa classe. Responde a "de tudo o que era
-      realmente X, quanto é que o modelo acertou?".
-    - IoU por classe = interseção / união entre a máscara real e a prevista
-      para essa classe. É mais rigoroso porque também penaliza falsos
-      positivos (o modelo prever X onde não era X).
-    """
-    true_flat = true_masks.flatten()
-    predicted_flat = predicted_masks.flatten()
-
-    labels = list(range(NUMBER_OF_CLASSES))
-    matrix = confusion_matrix(true_flat, predicted_flat, labels=labels)
-
-    per_class_accuracy = {}
-    per_class_iou = {}
-    per_class_support = {}
-
-    for class_id, class_name in enumerate(CLASS_NAMES):
-        true_positive = matrix[class_id, class_id]
-        total_true = matrix[class_id, :].sum()
-        total_predicted = matrix[:, class_id].sum()
-        union = total_true + total_predicted - true_positive
-
-        accuracy = true_positive / total_true if total_true > 0 else np.nan
-        iou = true_positive / union if union > 0 else np.nan
-
-        per_class_accuracy[class_name] = accuracy
-        per_class_iou[class_name] = iou
-        per_class_support[class_name] = int(total_true)
-
-    print("\n===== ACCURACY E IoU POR CLASSE (conjunto de teste) =====")
-    print(f"{'Classe':<20}{'Píxeis reais':>14}{'Accuracy':>12}{'IoU':>10}")
-
-    for class_name in CLASS_NAMES:
-        support = per_class_support[class_name]
-        accuracy = per_class_accuracy[class_name]
-        iou = per_class_iou[class_name]
-
-        accuracy_text = (
-            f"{accuracy * 100:.2f}%" if not np.isnan(accuracy) else "N/A"
-        )
-        iou_text = f"{iou * 100:.2f}%" if not np.isnan(iou) else "N/A"
-
-        print(f"{class_name:<20}{support:>14,}{accuracy_text:>12}{iou_text:>10}")
-
-    print(
-        "\nDica: as classes com menos 'píxeis reais' e/ou pior accuracy/IoU "
-        "são as que mais beneficiam de mais imagens de treino onde apareçam."
-    )
-
-    return per_class_accuracy, per_class_iou, per_class_support
-
-
-def plot_per_class_metrics(per_class_accuracy, per_class_iou):
-    class_colors_normalized = [
-        tuple(channel / 255.0 for channel in CLASS_COLORS[name])
-        for name in CLASS_NAMES
-    ]
-
-    accuracy_values = [
-        per_class_accuracy[name] * 100
-        if not np.isnan(per_class_accuracy[name])
-        else 0
-        for name in CLASS_NAMES
-    ]
-
-    iou_values = [
-        per_class_iou[name] * 100 if not np.isnan(per_class_iou[name]) else 0
-        for name in CLASS_NAMES
-    ]
-
-    x_positions = np.arange(NUMBER_OF_CLASSES)
-    bar_width = 0.35
-
-    plt.figure(figsize=(10, 5))
-
-    plt.bar(
-        x_positions - bar_width / 2,
-        accuracy_values,
-        width=bar_width,
-        label="Accuracy",
-        color=class_colors_normalized,
-        edgecolor="black",
-    )
-
-    plt.bar(
-        x_positions + bar_width / 2,
-        iou_values,
-        width=bar_width,
-        label="IoU",
-        color=class_colors_normalized,
-        edgecolor="black",
-        alpha=0.5,
-    )
-
-    plt.xticks(x_positions, CLASS_NAMES, rotation=30, ha="right")
-    plt.ylabel("%")
-    plt.ylim(0, 100)
-    plt.title("Accuracy e IoU por classe (conjunto de teste)")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
 
 
 def show_prediction_examples(
@@ -902,10 +839,6 @@ if __name__ == "__main__":
     print("Classes na validação:", np.unique(validation_masks))
     print("Classes no teste:", np.unique(test_masks))
 
-    # Distribuição de classes no treino: ajuda a perceber quais classes
-    # estão sub-representadas e, portanto, quais precisam de mais imagens.
-    print_class_pixel_distribution(train_masks, "treino")
-
     show_random_examples(
         train_images,
         train_masks,
@@ -940,7 +873,11 @@ if __name__ == "__main__":
 
     best_model = load_model(
         MODELS_DIR / "melhor_modelo_unet.keras",
-        custom_objects={"jacard_coef": jacard_coef},
+        custom_objects={
+            "masked_categorical_crossentropy": masked_categorical_crossentropy,
+            "masked_accuracy": masked_accuracy,
+            "masked_jaccard_coef": masked_jaccard_coef,
+        },
     )
 
     predicted_test_masks = evaluate_model_with_mean_iou(
@@ -948,13 +885,6 @@ if __name__ == "__main__":
         test_images=test_images,
         test_masks=test_masks,
     )
-
-    # Accuracy e IoU por classe: mostra exatamente que classes estão fracas.
-    per_class_accuracy, per_class_iou, per_class_support = (
-        compute_per_class_metrics(test_masks, predicted_test_masks)
-    )
-
-    plot_per_class_metrics(per_class_accuracy, per_class_iou)
 
     show_prediction_examples(
         test_images=test_images,
