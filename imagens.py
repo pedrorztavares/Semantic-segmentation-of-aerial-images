@@ -9,6 +9,7 @@ from matplotlib.patches import Patch
 
 from patchify import patchify
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
 
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import (
@@ -374,6 +375,30 @@ def show_random_examples(images, masks, number_of_examples=15):
 
 
 # ============================================================
+# DISTRIBUIÇÃO DE CLASSES (PARA SABER ONDE FALTAM DADOS)
+# ============================================================
+
+def print_class_pixel_distribution(masks, dataset_name):
+    """Mostra que percentagem de píxeis de cada classe existe num conjunto.
+
+    Classes com percentagens muito baixas são as que mais beneficiam
+    de teres mais imagens onde essa classe apareça.
+    """
+    total_pixels = masks.size
+
+    print(f"\n===== DISTRIBUIÇÃO DE CLASSES — {dataset_name.upper()} =====")
+    print(f"{'Classe':<20}{'Píxeis':>14}{'% do total':>14}")
+
+    class_ids, counts = np.unique(masks, return_counts=True)
+    counts_by_class = dict(zip(class_ids, counts))
+
+    for class_id, class_name in enumerate(CLASS_NAMES):
+        count = int(counts_by_class.get(class_id, 0))
+        percentage = 100.0 * count / total_pixels
+        print(f"{class_name:<20}{count:>14,}{percentage:>13.2f}%")
+
+
+# ============================================================
 # MÉTRICA JACCARD / IOU
 # ============================================================
 
@@ -672,6 +697,117 @@ def evaluate_model_with_mean_iou(
     return predicted_masks
 
 
+# ============================================================
+# MÉTRICAS POR CLASSE
+# ============================================================
+
+def compute_per_class_metrics(true_masks, predicted_masks):
+    """Calcula accuracy (recall) e IoU por classe, a partir da matriz de confusão.
+
+    - accuracy por classe = píxeis dessa classe classificados corretamente
+      / total de píxeis reais dessa classe. Responde a "de tudo o que era
+      realmente X, quanto é que o modelo acertou?".
+    - IoU por classe = interseção / união entre a máscara real e a prevista
+      para essa classe. É mais rigoroso porque também penaliza falsos
+      positivos (o modelo prever X onde não era X).
+    """
+    true_flat = true_masks.flatten()
+    predicted_flat = predicted_masks.flatten()
+
+    labels = list(range(NUMBER_OF_CLASSES))
+    matrix = confusion_matrix(true_flat, predicted_flat, labels=labels)
+
+    per_class_accuracy = {}
+    per_class_iou = {}
+    per_class_support = {}
+
+    for class_id, class_name in enumerate(CLASS_NAMES):
+        true_positive = matrix[class_id, class_id]
+        total_true = matrix[class_id, :].sum()
+        total_predicted = matrix[:, class_id].sum()
+        union = total_true + total_predicted - true_positive
+
+        accuracy = true_positive / total_true if total_true > 0 else np.nan
+        iou = true_positive / union if union > 0 else np.nan
+
+        per_class_accuracy[class_name] = accuracy
+        per_class_iou[class_name] = iou
+        per_class_support[class_name] = int(total_true)
+
+    print("\n===== ACCURACY E IoU POR CLASSE (conjunto de teste) =====")
+    print(f"{'Classe':<20}{'Píxeis reais':>14}{'Accuracy':>12}{'IoU':>10}")
+
+    for class_name in CLASS_NAMES:
+        support = per_class_support[class_name]
+        accuracy = per_class_accuracy[class_name]
+        iou = per_class_iou[class_name]
+
+        accuracy_text = (
+            f"{accuracy * 100:.2f}%" if not np.isnan(accuracy) else "N/A"
+        )
+        iou_text = f"{iou * 100:.2f}%" if not np.isnan(iou) else "N/A"
+
+        print(f"{class_name:<20}{support:>14,}{accuracy_text:>12}{iou_text:>10}")
+
+    print(
+        "\nDica: as classes com menos 'píxeis reais' e/ou pior accuracy/IoU "
+        "são as que mais beneficiam de mais imagens de treino onde apareçam."
+    )
+
+    return per_class_accuracy, per_class_iou, per_class_support
+
+
+def plot_per_class_metrics(per_class_accuracy, per_class_iou):
+    class_colors_normalized = [
+        tuple(channel / 255.0 for channel in CLASS_COLORS[name])
+        for name in CLASS_NAMES
+    ]
+
+    accuracy_values = [
+        per_class_accuracy[name] * 100
+        if not np.isnan(per_class_accuracy[name])
+        else 0
+        for name in CLASS_NAMES
+    ]
+
+    iou_values = [
+        per_class_iou[name] * 100 if not np.isnan(per_class_iou[name]) else 0
+        for name in CLASS_NAMES
+    ]
+
+    x_positions = np.arange(NUMBER_OF_CLASSES)
+    bar_width = 0.35
+
+    plt.figure(figsize=(10, 5))
+
+    plt.bar(
+        x_positions - bar_width / 2,
+        accuracy_values,
+        width=bar_width,
+        label="Accuracy",
+        color=class_colors_normalized,
+        edgecolor="black",
+    )
+
+    plt.bar(
+        x_positions + bar_width / 2,
+        iou_values,
+        width=bar_width,
+        label="IoU",
+        color=class_colors_normalized,
+        edgecolor="black",
+        alpha=0.5,
+    )
+
+    plt.xticks(x_positions, CLASS_NAMES, rotation=30, ha="right")
+    plt.ylabel("%")
+    plt.ylim(0, 100)
+    plt.title("Accuracy e IoU por classe (conjunto de teste)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
 def show_prediction_examples(
     test_images,
     test_masks,
@@ -766,6 +902,10 @@ if __name__ == "__main__":
     print("Classes na validação:", np.unique(validation_masks))
     print("Classes no teste:", np.unique(test_masks))
 
+    # Distribuição de classes no treino: ajuda a perceber quais classes
+    # estão sub-representadas e, portanto, quais precisam de mais imagens.
+    print_class_pixel_distribution(train_masks, "treino")
+
     show_random_examples(
         train_images,
         train_masks,
@@ -808,6 +948,13 @@ if __name__ == "__main__":
         test_images=test_images,
         test_masks=test_masks,
     )
+
+    # Accuracy e IoU por classe: mostra exatamente que classes estão fracas.
+    per_class_accuracy, per_class_iou, per_class_support = (
+        compute_per_class_metrics(test_masks, predicted_test_masks)
+    )
+
+    plot_per_class_metrics(per_class_accuracy, per_class_iou)
 
     show_prediction_examples(
         test_images=test_images,
