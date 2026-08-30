@@ -531,7 +531,7 @@ def train_unet_model(
     train_masks,
     validation_images,
     validation_masks,
-    epochs=100,
+    epochs=120,
     batch_size=4,
 ):
     train_masks_cat = to_categorical(
@@ -854,7 +854,7 @@ if __name__ == "__main__":
         train_masks=train_masks,
         validation_images=validation_images,
         validation_masks=validation_masks,
-        epochs=100,
+        epochs=120,
         batch_size=4,
     )
 
