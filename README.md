@@ -65,6 +65,7 @@ The original images are divided into patches of:
 Using patches reduces the amount of data processed simultaneously by the model and allows large aerial images to be handled more efficiently.
 Each image patch has a corresponding mask patch, preserving the spatial relationship between the input image and its expected segmentation result.
 The final training configuration does not use data augmentation.
+![Patches Visualization](image_docs/2.png)
 ### Dataset Split
 The dataset is divided into three subsets:
 - Training set — used to update the model parameters
