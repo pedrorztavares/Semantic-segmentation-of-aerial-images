@@ -87,8 +87,9 @@ The final layer performs multi-class pixel classification using a Softmax activa
 DeepLabV3+ was implemented as a comparison architecture.
 The purpose of including DeepLabV3+ was to evaluate whether a more complex segmentation architecture could provide better results with the available dataset.
 In the experiments performed during the project, U-Net achieved the best overall performance and was also faster to retrain during the iterative development of the dataset.
-Training Process
+### Training Process
 The general training workflow is:
+```text
 Aerial Images + Segmentation Masks
                 ↓
           Preprocessing
@@ -104,43 +105,22 @@ Aerial Images + Segmentation Masks
            Model Evaluation
                 ↓
         Segmentation Predictions
+```
 During training, the model receives an aerial image patch and produces a prediction for each pixel.
 The prediction is compared with the corresponding ground-truth segmentation mask, and the model parameters are updated in order to reduce the prediction error.
 This process is repeated across multiple epochs.
-Evaluation Metrics
-The models are evaluated using metrics suitable for semantic segmentation.
-Pixel Accuracy
-Pixel Accuracy measures the proportion of correctly classified pixels relative to the total number of pixels.
-Although simple and intuitive, this metric can be misleading when the dataset contains significant class imbalance.
-Intersection over Union
-Intersection over Union (IoU), also known as the Jaccard Index, measures the overlap between the predicted region and the corresponding ground-truth region.
-A value of:
-- 1 represents perfect overlap
-- 0 represents no overlap
-Mean IoU
-Mean IoU calculates the average IoU across all segmentation classes and provides a more balanced overview of model performance.
-In addition to quantitative metrics, predicted masks are visually analysed in order to identify common segmentation errors.
-Graphical Interface
-A graphical interface was developed to simplify model testing.
-The interface allows the user to:
-- Select one or more aerial images
-- Select the trained model to use
-- Run semantic segmentation
-- Generate predicted masks
-- Save the resulting masks to a selected folder
-This avoids the need to manually modify or execute individual prediction scripts every time a new image needs to be tested.
-The graphical interface also serves as a starting point for a future large-scale system capable of analysing aerial imagery at municipal scale.
-Patch Reconstruction
-Large images are processed using smaller patches.
-After inference, the predicted patches are reconstructed to generate the final segmentation mask.
-One limitation of this approach is the possible appearance of inconsistencies at patch boundaries, since each patch is processed independently.
-Future improvements may include:
+## Results
+The use of this code will result in the creation of two models of the format ```text .keras``` those being the model that got the best result in the training and the model that was created in the last epoch of trainig.
+
+## Future improvements may include:
 - Overlapping patches
 - Weighted blending between neighbouring predictions
 - Improved reconstruction strategies
 - Larger context windows
-Technologies
+
+##Technologies
 The main technologies and tools used in this project are:
+```text
 Programming and Deep Learning
 - Python
 - TensorFlow
@@ -155,8 +135,11 @@ Dataset Creation
 Version Control
 - Git
 - GitHub
-Project Structure
+```
+
+## Project Structure
 The exact repository structure may vary as the project evolves, but the project is generally organised around the following areas:
+```text
 project/
 │
 ├── dataset/
@@ -178,8 +161,8 @@ project/
 ├── requirements.txt
 └── README.md
 Note: folder names may differ from the structure shown above depending on the current repository organisation.
-
-Installation
+```
+## Installation
 1. Clone the Repository
 git clone <repository-url>
 cd <repository-folder>
