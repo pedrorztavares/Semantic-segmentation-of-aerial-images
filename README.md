@@ -1,4 +1,4 @@
-#Aerial Image Semantic Segmentation
+# Aerial Image Semantic Segmentation
 
 A Deep Learning project for semantic segmentation of aerial imagery, focused on identifying and classifying different types of terrain and structures in rural areas.
 The project includes the creation of a custom dataset, image annotation, preprocessing, model training and evaluation, comparison between different segmentation architectures, and a graphical interface for testing trained models on new aerial images.
