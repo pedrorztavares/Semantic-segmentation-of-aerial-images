@@ -1,13 +1,17 @@
-Aerial Image Semantic Segmentation
+#Aerial Image Semantic Segmentation
+
 A Deep Learning project for semantic segmentation of aerial imagery, focused on identifying and classifying different types of terrain and structures in rural areas.
 The project includes the creation of a custom dataset, image annotation, preprocessing, model training and evaluation, comparison between different segmentation architectures, and a graphical interface for testing trained models on new aerial images.
-Overview
+
+##Overview
 The main objective of this project is to apply Artificial Intelligence and Computer Vision techniques to semantic segmentation of aerial images.
 A custom dataset was created specifically for the problem under study, since the publicly available datasets that were analysed did not adequately match the required classes, visual characteristics, or geographical context.
+The original Dataset is publicly available at: https://www.kaggle.com/datasets/antniobalhau/rural-aerial-images-semantic-segmentation-dataset
 Two Deep Learning architectures were evaluated:
 - U-Net
 - DeepLabV3+
 The models receive aerial images as input and generate segmentation masks in which each pixel is assigned to one of the defined classes.
+#ADD image
 Segmentation Classes
 The dataset contains six segmentation classes:
 - Background
@@ -17,9 +21,9 @@ The dataset contains six segmentation classes:
 - Roads
 - Structures
 Each class is represented in the segmentation masks through a unique identifier.
-Dataset
+
+##Dataset
 The dataset was created specifically for this project.
-Image Collection
 Aerial images were collected using Google Earth, with the goal of obtaining visually diverse rural environments containing different combinations of the defined classes.
 During image selection, attention was given to:
 - Diversity of terrain
@@ -29,7 +33,8 @@ During image selection, attention was given to:
 - Different building and roof characteristics
 - Water bodies with different visual appearances
 - Variations in lighting and image composition
-Annotation
+
+###Annotation
 The collected images were manually annotated using CVAT (Computer Vision Annotation Tool).
 Each relevant region was assigned to one of the predefined classes, producing a segmentation mask corresponding to each aerial image.
 The annotation process was particularly important in regions where:
