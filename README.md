@@ -27,6 +27,7 @@ The dataset was created specifically for this project.
 Every image posseces a size of:
 ```text
 512 x 512 pixels
+```
 Aerial images were collected using Google Earth, with the goal of obtaining visually diverse rural environments containing different combinations of the defined classes.
 During image selection, attention was given to:
 - Diversity of terrain
