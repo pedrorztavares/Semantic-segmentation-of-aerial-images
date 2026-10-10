@@ -11,7 +11,6 @@ Two Deep Learning architectures were evaluated:
 - U-Net
 - DeepLabV3+
 The models receive aerial images as input and generate segmentation masks in which each pixel is assigned to one of the defined classes.
-#ADD image
 Segmentation Classes
 The dataset contains six segmentation classes:
 - Background
@@ -21,7 +20,7 @@ The dataset contains six segmentation classes:
 - Roads
 - Structures
 Each class is represented in the segmentation masks through a unique identifier.
-![Dataset example](images_docs/1.png)
+![Dataset example](image_docs/1.png)
 
 ## Dataset
 The dataset was created specifically for this project.
