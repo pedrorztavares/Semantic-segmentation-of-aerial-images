@@ -24,6 +24,9 @@ Each class is represented in the segmentation masks through a unique identifier.
 
 ## Dataset
 The dataset was created specifically for this project.
+Every image posseces a size of:
+```text
+512 x 512 pixels
 Aerial images were collected using Google Earth, with the goal of obtaining visually diverse rural environments containing different combinations of the defined classes.
 During image selection, attention was given to:
 - Diversity of terrain
@@ -42,7 +45,7 @@ The annotation process was particularly important in regions where:
 - Different classes had similar colours or textures
 - Objects had irregular shapes
 - Small elements were difficult to delimit accurately
-Data Preprocessing
+### Data Preprocessing
 Before training, the images and segmentation masks are prepared for use by the Deep Learning models.
 The preprocessing pipeline includes:
 1. Loading the aerial images and their corresponding masks
@@ -52,7 +55,8 @@ The preprocessing pipeline includes:
 5. Preparing class labels
 6. Normalising image values when required
 7. Dividing the dataset into training, validation, and test sets
-Image Patches
+
+### Image Patches
 The original images are divided into patches of:
 256 x 256 pixels
 Using patches reduces the amount of data processed simultaneously by the model and allows large aerial images to be handled more efficiently.
