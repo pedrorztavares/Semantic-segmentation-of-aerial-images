@@ -6,7 +6,7 @@ The project includes the creation of a custom dataset, image annotation, preproc
 ## Overview
 The main objective of this project is to apply Artificial Intelligence and Computer Vision techniques to semantic segmentation of aerial images.
 A custom dataset was created specifically for the problem under study, since the publicly available datasets that were analysed did not adequately match the required classes, visual characteristics, or geographical context.
-The original Dataset is publicly available at: https://www.kaggle.com/datasets/antniobalhau/rural-aerial-images-semantic-segmentation-dataset
+The original Dataset is publicly available at: https://www.kaggle.com/datasets/antniobalhau/rural-aerial-images-semantic-segmentation-dataset .
 Two Deep Learning architectures were evaluated:
 - U-Net
 - DeepLabV3+
