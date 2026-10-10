@@ -118,7 +118,7 @@ The use of this code will result in the creation of two models of the format ```
 - Improved reconstruction strategies
 - Larger context windows
 
-##Technologies
+## Technologies
 The main technologies and tools used in this project are:
 ```text
 Programming and Deep Learning
@@ -163,6 +163,7 @@ project/
 Note: folder names may differ from the structure shown above depending on the current repository organisation.
 ```
 ## Installation
+```text
 1. Clone the Repository
 git clone <repository-url>
 cd <repository-folder>
@@ -176,7 +177,8 @@ source .venv/bin/activate
 3. Install Dependencies
 If the repository contains a requirements.txt file:
 pip install -r requirements.txt
-Usage
+```
+## Usage
 The project contains scripts for the main stages of the segmentation pipeline, including:
 - Dataset preprocessing
 - Patch generation
@@ -185,36 +187,23 @@ The project contains scripts for the main stages of the segmentation pipeline, i
 - Prediction on new images
 - Graphical interface execution
 Because script names and paths may vary depending on the current repository version, run the appropriate script from the project directory using:
+```text
 python <script_name>.py
 For example:
 python train.py
 or:
 python gui.py
 Replace the example filenames with the actual filenames available in the repository.
-
-Trained Models
+```
+## Trained Models
 Trained models are stored using the Keras model format:
-.keras
+```text.keras ```
 These files can later be loaded for evaluation or prediction without retraining the network.
 Due to their size, trained models may not always be included directly in the Git repository.
-Known Limitations
-The main limitations identified during the project include:
-- Limited dataset size
-- Class imbalance
-- Visual similarity between some segmentation classes
-- Possible inconsistencies in manual annotations
-- Difficulty identifying small objects
-- Patch-boundary artefacts during reconstruction
-- Limited computational resources for extensive experimentation
-- Increased training time as the dataset grows
-Some common class-confusion cases include:
-- Dark or green water being confused with vegetation or shadows
-- Dirt roads being confused with agricultural fields
-- Buildings being confused with roads
-- Blue or green rooftops being confused with water
-- Vegetation being confused with agricultural areas
-Future Work
+
+## Future Work
 Several improvements can be explored in future versions of the project:
+```text
 - Increase the size and diversity of the dataset
 - Collect images from a wider variety of geographical areas
 - Improve annotation consistency
@@ -227,17 +216,20 @@ Several improvements can be explored in future versions of the project:
 - Reduce patch-boundary artefacts
 - Extend the graphical interface
 - Evaluate additional semantic segmentation architectures
+```
 A major future objective is the development of an application capable of detecting and segmenting specific classes in large-scale aerial imagery, including municipal-scale areas.
 The current graphical interface provides an initial foundation for this solution, since it already supports model selection, image processing, segmentation prediction, and mask generation.
 Scaling the system to municipal-level imagery would require improvements in:
+```text
 - Large-image processing
 - Patch management
 - Reconstruction quality
 - Computational performance
 - Result visualisation
 - Territorial analysis workflows
-Academic Context
-This project was developed in an academic context with the objective of studying and applying concepts related to:
+```
+## Academic Context
+This project was developed in an academic context for the polytechnic University of Castelo Branco  with the objective of studying and applying concepts related to:
 - Artificial Intelligence
 - Machine Learning
 - Deep Learning
@@ -245,15 +237,7 @@ This project was developed in an academic context with the objective of studying
 - Convolutional Neural Networks
 - Semantic Segmentation
 - Aerial Image Analysis
-The project includes both the technical implementation and an academic study of the methods, models, metrics, limitations, and results obtained.
-Use of Generative AI
-Generative Artificial Intelligence tools were used as complementary support during the project, particularly for language review, text reformulation, organisation of ideas, and development assistance.
-All technical decisions, implementation work, experimental results, analysis, and conclusions were reviewed and validated according to the work effectively carried out during the project.
-License
-No license has been explicitly defined for this repository yet.
-If the project is intended to be publicly reusable, an appropriate open-source license should be added, such as:
-- MIT License
-- Apache License 2.0
-- GPLv3
-Authors
-Developed as part of an academic project focused on semantic segmentation of aerial imagery using Deep Learning.
+
+Authors:
+Pedro Tavares : pedrorztavares@gmail.com
+António Balhau : balahujunior@hotmail.com
