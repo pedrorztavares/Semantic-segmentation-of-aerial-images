@@ -21,6 +21,7 @@ The dataset contains six segmentation classes:
 - Roads
 - Structures
 Each class is represented in the segmentation masks through a unique identifier.
+![Dataset example](images_docs/1.png)
 
 ## Dataset
 The dataset was created specifically for this project.
